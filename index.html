@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f7f3">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="カテログ">
+  <meta name="description" content="食事・栄養・体重を端末内に記録する、オフライン対応の体重管理アプリ（減量にも増量にも）">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png">
+  <link rel="stylesheet" href="./styles.css">
+  <title>カテログ</title>
+</head>
+<body>
+  <header class="app-header">
+    <h1 class="app-title"><img class="app-icon" src="./icon.svg" alt="" width="28" height="28">カテログ</h1>
+  </header>
+
+  <main id="app" aria-live="polite">
+    <div class="tabs-bar">
+    <nav class="tabs" aria-label="メインメニュー">
+      <button type="button" data-page="today" class="tab active">記録</button>
+      <button type="button" data-page="history" class="tab">履歴</button>
+      <button type="button" data-page="foods" class="tab">食品</button>
+      <button type="button" data-page="backup" class="tab">データ</button>
+    </nav>
+    </div>
+    <section id="page-content"></section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="food-dialog" class="modal" tabindex="-1">
+    <form id="food-form" method="dialog" novalidate>
+      <div class="modal-heading">
+        <div><h2 id="food-dialog-title">食品を登録</h2></div>
+        <button type="button" class="icon-button" data-close="food-dialog" aria-label="閉じる">×</button>
+      </div>
+      <input type="hidden" name="id">
+      <button type="button" class="button secondary seibun-open" data-seibun-target="food">成分表から探す</button>
+      <label class="field">食品名<input name="name" type="text" maxlength="80" required autocomplete="off" placeholder="例：鶏むね肉"></label>
+      <p id="food-duplicate-note" class="hint duplicate-note" hidden>同じ名前の食品がすでに登録されています。別の食品として登録されます。</p>
+      <label class="field">種類
+        <select name="type">
+          <option value="unit">個数で記録（1個・1パックなど）</option>
+          <option value="weight">重さで記録（100gあたり）</option>
+        </select>
+      </label>
+      <div id="unit-fields" class="form-row">
+        <label class="field">基準量<input name="baseAmount" type="number" min="0.01" max="9999.99" step="any" inputmode="decimal" value="1"></label>
+        <label class="field">単位<input name="unit" type="text" maxlength="12" value="個" placeholder="例：個、パック、本"></label>
+      </div>
+      <p id="weight-hint" class="hint" hidden>重さで記録する食品は、基準量が100g、単位がgで固定です。栄養値は100gあたりで登録し、記録するときは食べた重さを入力します。</p>
+      <div class="form-row">
+        <label class="field"><span id="calorie-label">基準量あたり</span>カロリー（kcal）<input name="calories" type="number" min="0" max="99999.9" step="any" inputmode="decimal" required></label>
+        <label class="field"><span id="protein-label">基準量あたり</span>タンパク質（g）<input name="protein" type="number" min="0" max="9999.9" step="any" inputmode="decimal" required></label>
+      </div>
+      <div class="form-row">
+        <label class="field"><span id="fat-label">基準量あたり</span>脂質（g）<input name="fat" type="number" min="0" max="9999.9" step="any" inputmode="decimal" required></label>
+        <label class="field"><span id="carbohydrate-label">基準量あたり</span>炭水化物（g）<input name="carbohydrate" type="number" min="0" max="9999.9" step="any" inputmode="decimal" required></label>
+      </div>
+      <p class="hint">食品マスターを変更すると、紐づく食事記録にも反映されます。</p>
+      <div class="modal-actions"><button type="button" id="food-delete" class="button danger food-delete" hidden>削除</button><button type="button" class="button secondary" data-close="food-dialog">キャンセル</button><button class="button primary" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="quick-food-dialog" class="modal" tabindex="-1">
+    <form id="quick-food-form" class="quick-food-form" method="dialog" novalidate>
+      <input type="hidden" name="mealId" value="">
+      <div class="modal-heading"><div><h2 id="quick-food-title">手入力で追加</h2></div><button type="button" class="icon-button" data-close="quick-food-dialog" aria-label="閉じる">×</button></div>
+      <p id="quick-food-description" class="hint">食品マスターには登録せず、この記録だけに使います。</p>
+      <button type="button" class="button secondary seibun-open" data-seibun-target="quick">成分表から探す</button>
+      <label class="field">食品名<input name="name" type="text" maxlength="80" required autocomplete="off" placeholder="例：コンビニのおにぎり"></label>
+      <label class="field">種類
+        <select name="type">
+          <option value="unit">個数で記録（1個・1パックなど）</option>
+          <option value="weight">重さで記録（100gあたり）</option>
+        </select>
+      </label>
+      <div id="quick-unit-fields" class="form-row">
+        <label class="field">基準量<input name="baseAmount" type="number" min="0.01" max="9999.99" step="any" inputmode="decimal" value="1"></label>
+        <label class="field">単位<input name="unit" type="text" maxlength="12" value="個" placeholder="例：個、パック、本"></label>
+      </div>
+      <p id="quick-weight-hint" class="hint" hidden>重さで記録する食品は、基準量が100g、単位がgで固定です。栄養値は100gあたりで入力し、追加するときは食べた重さを入力します。</p>
+      <div class="form-row">
+        <label class="field"><span id="quick-calorie-label">基準量あたり</span>カロリー（kcal）<input name="calories" type="number" min="0" max="99999.9" step="any" inputmode="decimal" required></label>
+        <label class="field"><span id="quick-protein-label">基準量あたり</span>タンパク質（g）<input name="protein" type="number" min="0" max="9999.9" step="any" inputmode="decimal" required></label>
+      </div>
+      <div class="form-row">
+        <label class="field"><span id="quick-fat-label">基準量あたり</span>脂質（g）<input name="fat" type="number" min="0" max="9999.9" step="any" inputmode="decimal" required></label>
+        <label class="field"><span id="quick-carbohydrate-label">基準量あたり</span>炭水化物（g）<input name="carbohydrate" type="number" min="0" max="9999.9" step="any" inputmode="decimal" required></label>
+      </div>
+      <label class="field quick-food-amount" id="quick-amount-label">追加する数量（個）<input name="amount" type="number" min="0.01" max="9999.99" step="any" inputmode="decimal" required value="1"></label>
+      <div class="modal-actions"><button type="button" class="button secondary" data-close="quick-food-dialog">キャンセル</button><button id="quick-food-submit" class="button primary" type="submit">記録に追加</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="copy-dialog" class="modal" tabindex="-1">
+    <form id="copy-form" method="dialog" novalidate>
+      <div class="modal-heading">
+        <div><h2>ほかの日の食事をコピー</h2></div>
+        <button type="button" class="icon-button" data-close="copy-dialog" aria-label="閉じる">×</button>
+      </div>
+      <p id="copy-target" class="hint"></p>
+      <label class="field">コピー元の日付<input name="sourceDate" type="date" min="2000-01-01" max="2099-12-31" required></label>
+      <div id="copy-preview" class="copy-preview hint">コピー元の日付を選択してください。</div>
+      <fieldset class="choice-list">
+        <legend>コピー先の食事記録</legend>
+        <label><input type="radio" name="mode" value="append" checked> 既存の記録に追加</label>
+        <label><input type="radio" name="mode" value="replace"> 既存の記録を置き換え</label>
+      </fieldset>
+      <div class="modal-actions"><button type="button" class="button secondary" data-close="copy-dialog">キャンセル</button><button class="button primary" type="submit">コピーを実行</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="goal-dialog" class="modal" tabindex="-1" aria-labelledby="goal-dialog-title">
+    <form id="goal-form" method="dialog" novalidate>
+      <div class="modal-heading"><div><h2 id="goal-dialog-title">目標を設定</h2></div><button type="button" class="icon-button" data-close="goal-dialog" aria-label="閉じる">×</button></div>
+      <label class="field">目標体重（kg）<input name="goalWeight" type="number" min="0.1" max="999.9" step="0.1" inputmode="decimal" placeholder="例：60.0"></label>
+      <div class="field"><label for="goal-target-date">達成目標日（任意）</label><div class="goal-date-row"><input id="goal-target-date" name="targetDate" type="date" min="2000-01-01" max="2099-12-31"><button type="button" id="clear-target-date" class="button secondary small" aria-label="達成目標日を消す" hidden>消す</button></div></div>
+      <p class="hint">目標体重だけでも保存できます。達成目標日を設定した場合は、グラフの終了日に選べます。</p>
+      <div class="modal-actions"><button type="button" id="clear-goal" class="button danger goal-clear" hidden>目標をクリア</button><button type="button" class="button secondary" data-close="goal-dialog">キャンセル</button><button class="button primary" type="submit">保存</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="food-picker-dialog" class="modal food-picker" aria-labelledby="food-picker-title">
+    <div class="modal-heading food-picker-heading">
+      <div><h2 id="food-picker-title">食品を選択</h2></div>
+      <button type="button" class="icon-button" data-close="food-picker-dialog" aria-label="閉じる">×</button>
+    </div>
+    <label class="field food-picker-search"><span class="food-picker-search-label">食品名で検索<span id="food-picker-count" class="food-picker-count"></span></span><input id="food-picker-search" type="search" maxlength="50" placeholder="例：鶏むね肉" autocomplete="off" enterkeyhint="search"></label>
+    <div id="food-picker-list" class="food-picker-list" aria-label="食品の候補" tabindex="-1"></div>
+  </dialog>
+
+  <dialog id="seibun-dialog" class="modal food-picker" aria-labelledby="seibun-title">
+    <div class="modal-heading food-picker-heading">
+      <div><h2 id="seibun-title">成分表から探す</h2></div>
+      <button type="button" class="icon-button" data-close="seibun-dialog" aria-label="閉じる">×</button>
+    </div>
+    <label class="field food-picker-search"><span class="food-picker-search-label">食品名で検索<span id="seibun-count" class="food-picker-count"></span></span><input id="seibun-search" type="search" maxlength="50" placeholder="例：鶏むね肉" autocomplete="off" enterkeyhint="search"></label>
+    <div id="seibun-list" class="food-picker-list" aria-label="成分表の候補" tabindex="-1"></div>
+    <p id="seibun-source" class="hint seibun-source"></p>
+  </dialog>
+
+  <!-- 体重グラフの「いつから」「いつまで」で開く日付の一覧（画面の下から出す。年月ごとにたためる。中身は app.js の openDateSheet が作る） -->
+  <dialog id="date-sheet" class="action-sheet date-sheet" aria-labelledby="date-sheet-title" tabindex="-1">
+    <div class="date-sheet-inner">
+      <div class="date-sheet-head"><h2 id="date-sheet-title">いつから</h2><button type="button" class="icon-button" data-close="date-sheet" aria-label="閉じる">×</button></div>
+      <div id="date-sheet-list" class="date-sheet-list"></div>
+    </div>
+  </dialog>
+
+  <!-- カードの「⋯」で開く操作のメニュー（画面の下から出す。中身は app.js の openActionSheet が作る） -->
+  <dialog id="action-sheet" class="action-sheet" aria-labelledby="action-sheet-title" tabindex="-1">
+    <div class="action-sheet-inner">
+      <div class="action-sheet-group">
+        <div class="action-sheet-heading"><strong id="action-sheet-title"></strong><span id="action-sheet-detail"></span></div>
+        <div id="action-sheet-actions"></div>
+      </div>
+      <button type="button" class="action-sheet-cancel" data-close="action-sheet">キャンセル</button>
+    </div>
+  </dialog>
+
+  <script src="./app.js" defer></script>
+</body>
+</html>

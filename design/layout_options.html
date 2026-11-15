@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>カード配置の比較</title>
+<!-- 比較用の一時ファイル。アプリには含めない（www/・APP_FILES・sw.js の対象外） -->
+<link rel="stylesheet" href="../styles.css">
+<style>
+  /* ===== 比較ページ自体の見た目 ===== */
+  .doc-title { margin: 20px 0 6px; font-size: 1.3rem; }
+  .doc-lead { color: var(--muted); font-size: .82rem; line-height: 1.6; margin-bottom: 18px; }
+  .target { margin: 34px 0 10px; padding-top: 14px; border-top: 3px solid var(--green); }
+  .target > h2 { font-size: 1.15rem; margin-bottom: 4px; }
+  .option { margin: 18px 0 26px; }
+  .option-frame { padding: 10px 0 2px; background: var(--paper); }
+  .option-title { display: flex; align-items: baseline; gap: 8px; margin: 0 2px 10px; font-size: .95rem; font-weight: 800; }
+  .option-title .tag { flex: none; padding: 1px 8px; border-radius: 999px; background: var(--mint); color: var(--green-dark); font-size: .72rem; }
+  .option-title .tag.now { background: #eceee9; color: var(--muted); }
+  .option-title .tag.rec { background: var(--green); color: white; }
+  .notes { display: grid; gap: 4px; margin: 4px 2px 0; font-size: .8rem; line-height: 1.55; }
+  .notes p { margin: 0; }
+  .notes .good::before { content: "◎ "; color: var(--green); font-weight: 800; }
+  .notes .bad::before { content: "△ "; color: var(--orange); font-weight: 800; }
+  .cmp { width: 100%; border-collapse: collapse; font-size: .76rem; }
+  .cmp th, .cmp td { border-bottom: 1px solid var(--line); padding: 6px 5px; text-align: left; vertical-align: top; }
+  .cmp th { color: var(--muted); font-weight: 700; white-space: nowrap; }
+  .cmp tr.rec td { background: var(--mint); font-weight: 700; }
+  .mock-caption { color: var(--muted); font-size: .72rem; margin: 2px 2px 8px; }
+
+  /* ===== 共通：新しい案のボタンは押しやすい高さ（44px）にする ===== */
+  .tall .button.small { min-height: 44px; }
+
+  /* ===== 今日 B：右上＝主な操作（数量／編集）、右下＝削除（今日限りも同じ骨組み） ===== */
+  .v-today-b .meal-controls [data-edit-meal] { display: block; margin-left: auto; }
+
+  /* 今日B・食品B：360px未満（320pxの端末）では栄養成分を1列にして、削除の列と重ならないようにする */
+  @media (max-width: 359px) { .v-today-b .nutrient-grid, .v-food-b .nutrient-grid { grid-template-columns: minmax(0, 1fr); } }
+
+  /* ===== 今日 C：操作は上段に横並び、栄養成分は全幅 ===== */
+  .v-today-c .meal-controls { display: flex; gap: 8px; align-items: center; }
+  .v-today-c .meal-lower { grid-template-columns: minmax(0, 1fr); }
+
+  /* ===== 体重 B：2段（見出しと削除／入力と保存） ===== */
+  .v-weight-b .weight-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px 9px; align-items: center; }
+  .v-weight-b .weight-row h2 { grid-column: 1 / 3; margin: 0; }
+  .v-weight-b .weight-status { color: var(--muted); font-size: .78rem; font-weight: 400; margin-left: 6px; }
+  .v-weight-b #delete-weight-b { grid-column: 3; grid-row: 1; justify-self: end; }
+  .v-weight-b .weight-input { grid-column: 1; grid-row: 2; width: 100%; max-width: none; }
+  .v-weight-b .unit-label { grid-column: 2; grid-row: 2; }
+  .v-weight-b #save-weight-b { grid-column: 3; grid-row: 2; min-width: 72px; }
+
+  /* ===== 体重 C：1段のまま、削除は保存から離した小さなアイコンボタン ===== */
+  .v-weight-c .weight-row { flex-wrap: nowrap; }
+  .v-weight-c .weight-input { flex: 1 1 72px; max-width: 116px; min-width: 0; }
+  .v-weight-c .icon-delete { flex: none; width: 44px; height: 44px; margin-left: 4px; border: 1px solid #f0d8d4; border-radius: 11px; background: #fff7f6; color: var(--danger); font-size: 1.05rem; line-height: 1; }
+
+  /* ===== 食品 B：右上＝編集（名前の横）、右下＝削除（栄養成分と中央） ===== */
+  .v-food-b .food-actions { display: contents; }
+  .v-food-b .food-actions > .button { position: static; display: block; }
+  .v-food-b [data-edit-food] { grid-column: 2; grid-row: 1 / 3; align-self: start; justify-self: end; }
+  .v-food-b [data-delete-food] { grid-column: 2; grid-row: 3; align-self: center; justify-self: end; }
+
+  /* ===== 食品 C：編集・削除を上段に横並び、栄養成分は全幅 ===== */
+  .v-food-c .food-actions { grid-column: 2; grid-row: 1 / 3; align-self: start; display: flex; gap: 8px; }
+  .v-food-c .food-actions > .button { position: static; display: block; }
+  .v-food-c .food-card .food-nutrients { grid-column: 1 / -1; margin-top: 2px; }
+
+  /* ===== D：右端のボタンを1つのかたまりにして、カードの上下の真ん中に置く（今日・食品共通） ===== */
+  .v-d .meal-item, .v-d .food-card { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto; column-gap: 12px; align-items: center; }
+  .v-d .d-body { grid-column: 1; grid-row: 1; min-width: 0; }
+  .v-d .d-body .meal-nutrients { margin-top: 10px; }
+  .v-d .d-body .food-basis { margin: 5px 0 8px; }
+  .v-d .d-actions { grid-column: 2; grid-row: 1; display: flex; flex-direction: column; justify-content: center; gap: 12px; }
+  /* 右の列の要素（数量入力・編集・削除）は、すべて幅80px・高さ44px */
+  .v-d .d-actions > * { width: 80px; height: 44px; min-height: 44px; margin: 0; }
+  .v-d .d-actions > .quantity-input { padding: 6px 10px; }
+  /* 右の列（80px＋間隔12px）を取ると、スマートフォン幅では2列の栄養成分が収まらないため1列にする */
+  @media (max-width: 430px) { .v-d .nutrient-grid { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+  /* D'：右の操作列とカードの中身の間に薄い区切り線 */
+  .v-dline .d-actions { align-self: stretch; padding-left: 12px; border-left: 1px solid var(--line); }
+
+  /* ===== E：B のまま、名前を1行に切って「…」で省略 ===== */
+  .v-e .meal-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+  /* ===== F：マスターの記録の数量入力を「数量：[入力欄] g」の行に移し、右の列はボタンだけ ===== */
+  .v-f .meal-amount { display: flex; align-items: center; gap: 6px; }
+  .v-f .meal-amount .quantity-input { width: 80px; height: 40px; min-height: 40px; padding: 6px 10px; }
+  .v-f .f-label { flex: none; white-space: nowrap; }
+
+  /* ===== 履歴 共通（B・C）：日付→体重→栄養成分→PFC、栄養成分とPFCは全幅 ===== */
+  .v-hist-b .history-date, .v-hist-c .history-date { grid-row: 1; }
+  .v-hist-b .history-weight, .v-hist-c .history-weight { grid-row: 2; grid-column: 1 / -1; }
+  .v-hist-b .history-summary, .v-hist-c .history-summary { grid-row: 3; grid-column: 1 / -1; }
+  .v-hist-b .history-pfc, .v-hist-c .history-pfc { grid-row: 4; grid-column: 1 / -1; }
+
+  /* 履歴 B：削除は日付の行の右に控えめに */
+  .v-hist-b .history-row { padding: 12px 12px 14px 14px; }
+  .v-hist-b .history-delete { grid-column: 2; grid-row: 1; align-self: center; padding-left: 11px; padding-right: 11px; }
+  .v-hist-b .history-row.no-meals .history-summary { grid-row: 3; }
+
+  /* 履歴 C：一覧に削除を置かない（開いた日の画面へ移す）。右端に「開く」の目印 › */
+  .v-hist-c .history-row { padding: 14px 12px 14px 14px; grid-template-columns: minmax(0, 1fr) 14px; }
+  .v-hist-c .history-chevron { grid-column: 2; grid-row: 1 / -1; align-self: center; justify-self: end; width: 9px; height: 9px; border-right: 2px solid var(--muted); border-top: 2px solid var(--muted); transform: rotate(45deg); }
+  .v-hist-c .history-row .history-weight, .v-hist-c .history-row .history-summary, .v-hist-c .history-row .history-pfc { grid-column: 1; }
+  .v-hist-c .day-danger { margin-top: 4px; }
+  .v-hist-c .day-danger .hint { margin: 8px 0 0; }
+
+  /* ===== 案G：「⋯」メニュー ===== */
+  /* カードの右上に「⋯」（押せる範囲 44×44px、見た目は控えめ）。右の列はなくし、中身は全幅 */
+  .v-g .meal-item, .v-g .food-card { position: relative; display: block; }
+  .v-g .card-body, .v-g .food-main { min-width: 0; }
+  .v-g .meal-name, .v-g .food-card .meal-name { padding-right: 42px; }
+  .g-more { position: absolute; top: 4px; right: 4px; z-index: 2; width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--muted); font-size: 1.25rem; font-weight: 800; line-height: 1; letter-spacing: .05em; }
+  .g-more:active { background: #f0f2ee; }
+  .g-more:focus-visible { outline: 2px solid #79aa8d; outline-offset: -2px; }
+  /* 右の列がないので、320px でも栄養成分は2列のまま */
+  .v-g .nutrient-grid { grid-template-columns: repeat(2, minmax(max-content, 1fr)) !important; }
+  /* 履歴：「⋯」以外のどこを押してもその日を開く（透明な開くボタンの上に「⋯」を重ねる） */
+  .v-g .history-row { display: block; }
+  .v-g .history-date { padding-right: 42px; }
+
+  /* アクションシート（実装では静的な <dialog> を showModal で開く。比較ページでは開いた状態の見本も描く） */
+  .g-sheet { box-sizing: border-box; width: 100%; max-width: 560px; margin: 0 auto; padding: 0 10px max(10px, env(safe-area-inset-bottom)); }
+  .g-sheet-group { overflow: hidden; border-radius: 16px; background: white; }
+  .g-sheet-title { padding: 13px 16px 11px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: .78rem; line-height: 1.45; text-align: center; overflow-wrap: anywhere; }
+  .g-sheet-title strong { display: block; color: var(--ink); font-size: .88rem; }
+  .g-sheet-action { display: block; width: 100%; min-height: 52px; border: 0; border-top: 1px solid var(--line); background: white; color: var(--ink); font-size: 1rem; font-weight: 650; }
+  .g-sheet-title + .g-sheet-action { border-top: 0; }
+  .g-sheet-action.danger { color: var(--danger); }
+  .g-sheet-gap { height: 8px; background: #f0f2ee; }
+  .g-sheet-cancel { display: block; width: 100%; min-height: 52px; margin-top: 8px; border: 0; border-radius: 16px; background: white; color: var(--ink); font-size: 1rem; font-weight: 750; }
+  /* 本物の <dialog>（画面の下に出す） */
+  dialog.g-menu { position: fixed; inset: auto 0 0 0; width: 100%; max-width: none; margin: 0; padding: 0; border: 0; background: transparent; }
+  dialog.g-menu::backdrop { background: #1b2a1f66; }
+  /* 開いた状態の見本：スマートフォンの画面の枠 */
+  .g-phone { position: relative; height: 470px; overflow: hidden; border: 1px solid #d7e0d5; border-radius: 22px; background: var(--paper); }
+  .g-phone-content { padding: 12px 10px; }
+  .g-phone-shade { position: absolute; inset: 0; background: #1b2a1f66; }
+  .g-phone .g-sheet { position: absolute; left: 0; right: 0; bottom: 0; }
+  .cmp-g td:first-child { white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1 class="doc-title">カード配置の比較（デザイン案）</h1>
+  <p class="doc-lead">今の <code>styles.css</code> を読み込み、案ごとの差分だけをこのページに書いています。データはダミーです。「新しい案」のボタンは押しやすさのため高さ44pxにしています（今の配置は36px）。</p>
+  <section class="card" id="summary">
+    <h2 style="font-size:1.05rem;margin-bottom:8px">おすすめ：今日F・食品D・履歴C・体重は今のまま</h2>
+    <p class="hint" style="margin-bottom:8px">考え方は1つ：<strong>「右の列は操作だけ。カードの上下の真ん中に1つのかたまりで置く（幅80px・高さ44px）。入力（数量）は中身の行に置く」</strong>。履歴は右の列が ›（開く）だけになり、削除はその日の画面へ。情報の並びは、どの画面も「名前／日付 → 数値 → 栄養成分 →（PFC）」。</p>
+    <div style="overflow-x:auto"><table class="cmp">
+      <thead><tr><th>案</th><th>統一感</th><th>見た目</th><th>使いやすさ</th><th>実装の手間</th></tr></thead>
+      <tbody>
+        <tr><td>今日 今</td><td>△</td><td>○</td><td>△ 編集と削除が近い</td><td>—</td></tr>
+        <tr><td>今日 B</td><td>◎</td><td>○</td><td>◎</td><td>小</td></tr>
+        <tr><td>今日 C</td><td>○</td><td>△ 320pxで名前が細長い</td><td>△ 数量と削除が隣</td><td>小</td></tr>
+        <tr><td>今日 D</td><td>○</td><td>○ 栄養成分が1列で高め</td><td>◎</td><td>小</td></tr>
+        <tr><td>今日 D'</td><td>○</td><td>○ 左右がはっきり</td><td>◎</td><td>小</td></tr>
+        <tr><td>今日 E</td><td>○</td><td>◎ 低い／△ 名前が切れる</td><td>△ 名前が読めない</td><td>ほぼなし</td></tr>
+        <tr class="rec"><td>今日 F</td><td>◎</td><td>○ 栄養成分が1列で高め</td><td>◎ 数量が名前のすぐ下</td><td>小〜中</td></tr>
+        <tr><td>食品 今</td><td>△</td><td>△ 右上が空く</td><td>△</td><td>—</td></tr>
+        <tr><td>食品 B</td><td>◎</td><td>○</td><td>◎</td><td>小</td></tr>
+        <tr><td>食品 C</td><td>○</td><td>△</td><td>△</td><td>小</td></tr>
+        <tr class="rec"><td>食品 D（＝今日Fの食品）</td><td>◎</td><td>○ 栄養成分が1列で高め</td><td>◎</td><td>小</td></tr>
+        <tr><td>食品 D'</td><td>○</td><td>○</td><td>◎</td><td>小</td></tr>
+        <tr><td>食品 E</td><td>○</td><td>△ 名前が切れる</td><td>△ 名前を確かめられない</td><td>ほぼなし</td></tr>
+        <tr><td>履歴 今</td><td>△</td><td>△ 右が空く・PFCが上</td><td>○</td><td>—</td></tr>
+        <tr><td>履歴 B</td><td>○</td><td>○</td><td>△ 削除が目立つ</td><td>小</td></tr>
+        <tr class="rec"><td>履歴 C</td><td>◎</td><td>◎</td><td>○ 削除は1手間ふえる</td><td>中（今日の画面に削除を追加）</td></tr>
+        <tr class="rec"><td>体重 今</td><td>○</td><td>○</td><td>○</td><td>ほぼなし</td></tr>
+        <tr><td>体重 B</td><td>○</td><td>○</td><td>◎</td><td>小（高さ＋50px）</td></tr>
+        <tr><td>体重 C</td><td>△ ×だけ見た目が違う</td><td>○</td><td>○</td><td>小</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+  <div id="content"></div>
+</div>
+
+<script>
+"use strict";
+// ---------- ダミーデータ ----------
+const meals = [
+  { id: "m1", name: "ごはん", amount: "150", unit: "g", kcal: "234", p: "3.75", f: "0.45", c: "55.65" },
+  { id: "m2", name: "業務用ミックスナッツ（食塩不使用・大容量パック）", amount: "1", unit: "袋", kcal: "2,514.9", p: "139.1", f: "109.9", c: "1,011" },
+  { id: "t1", temp: true, name: "コンビニのおにぎり 鮭", amount: "2", unit: "個", kcal: "360", p: "10", f: "2", c: "76" },
+  { id: "t2", temp: true, name: "手作りのお弁当（から揚げ・卵焼き・ごはん大盛り）", amount: "1", unit: "食", kcal: "1,234.5", p: "56.7", f: "48.2", c: "150.2" }
+];
+const foods = [
+  { id: "f1", name: "ごはん", basis: "100gあたり", kcal: "156", p: "2.5", f: "0.3", c: "37.1" },
+  { id: "f2", name: "業務用ミックスナッツ（食塩不使用・大容量パック）", basis: "1 袋あたり", kcal: "2,514.9", p: "139.1", f: "109.9", c: "1,011" },
+  { id: "f3", name: "鶏むね肉（皮なし）生", basis: "100gあたり", kcal: "105", p: "23.3", f: "1.9", c: "0.1" }
+];
+const days = [
+  { date: "2026/11/14(土)", kg: "72.50", meals: { kcal: "2,514.9", p: "139.1", f: "109.9", c: "1,011" }, pfc: ["10", "17.7", "72.3"] },
+  { date: "2026/11/10(火)", kg: "73.15", meals: null },
+  { date: "2026/11/01(日)", kg: null, meals: { kcal: "600", p: "24", f: "12", c: "135" }, pfc: ["12.9", "14.5", "72.6"] }
+];
+
+// ---------- 今の app.js と同じマークアップ ----------
+const mealNutrients = m => `<div class="meal-nutrients nutrient-grid"><span class="nutrition-calorie">カロリー ${m.kcal} kcal</span><span class="nutrition-protein">タンパク質 ${m.p} g</span><span class="nutrition-fat">脂質 ${m.f} g</span><span class="nutrition-carbohydrate">炭水化物 ${m.c} g</span></div>`;
+const qty = m => `<input class="quantity-input" type="number" value="${m.amount}" aria-label="${m.name}の数量">`;
+const del = m => `<button class="button danger small" data-delete-meal="${m.id}" type="button">削除</button>`;
+const edit = m => `<button class="button secondary small" type="button" data-edit-meal="${m.id}" aria-label="${m.name}を編集">編集</button>`;
+const mealMain = m => `<div class="meal-main"><div class="meal-name">${m.name}</div><div class="meal-amount">数量：${m.amount} ${m.unit}${m.temp ? ' <span class="meal-temporary">今日限り</span>' : ""}</div></div>`;
+
+function mealNow(m) { // 今の配置
+  if (!m.temp) return `<article class="meal-item">${mealMain(m)}<div class="meal-controls">${qty(m)}</div><div class="meal-lower">${mealNutrients(m)}${del(m)}</div></article>`;
+  return `<article class="meal-item is-temporary">${mealMain(m)}<div class="meal-lower">${mealNutrients(m)}<div class="card-actions">${edit(m)}${del(m)}</div></div></article>`;
+}
+function mealB(m) { // 右上＝数量／編集、右下＝削除
+  return `<article class="meal-item">${mealMain(m)}<div class="meal-controls">${m.temp ? edit(m) : qty(m)}</div><div class="meal-lower">${mealNutrients(m)}${del(m)}</div></article>`;
+}
+function mealC(m) { // 上段に横並び、栄養成分は全幅
+  return `<article class="meal-item">${mealMain(m)}<div class="meal-controls">${m.temp ? edit(m) : qty(m)}${del(m)}</div><div class="meal-lower">${mealNutrients(m)}</div></article>`;
+}
+const mealSection = fn => `<section class="card"><div class="meal-top"><h2>食事</h2></div><div class="meal-list">${meals.map(fn).join("")}</div></section>`;
+
+const weightNow = `<section class="card weight-row"><h2>体重</h2><input class="weight-input" type="number" value="72.50" aria-label="体重（kg）"><span class="unit-label">kg</span><button class="button secondary small" type="button">保存</button><button class="button danger small" type="button">削除</button></section>`;
+const weightB = `<section class="card weight-row"><h2>体重<span class="weight-status">記録済み</span></h2><button id="delete-weight-b" class="button danger small" type="button">削除</button><input class="weight-input" type="number" value="72.50" aria-label="体重（kg）"><span class="unit-label">kg</span><button id="save-weight-b" class="button secondary small" type="button">保存</button></section>`;
+const weightC = `<section class="card weight-row"><h2>体重</h2><input class="weight-input" type="number" value="72.50" aria-label="体重（kg）"><span class="unit-label">kg</span><button class="button secondary small" type="button">保存</button><button class="icon-delete" type="button" aria-label="体重の記録を削除">×</button></section>`;
+
+const foodCard = f => `<article class="food-card"><div class="food-main"><div class="meal-name">${f.name}</div><div class="food-nutrition"><div class="food-basis">${f.basis}</div><div class="food-nutrients nutrient-grid"><span class="nutrition-calorie"><small>カロリー</small><strong>${f.kcal} kcal</strong></span><span class="nutrition-protein"><small>タンパク質</small><strong>${f.p} g</strong></span><span class="nutrition-fat"><small>脂質</small><strong>${f.f} g</strong></span><span class="nutrition-carbohydrate"><small>炭水化物</small><strong>${f.c} g</strong></span></div></div></div><div class="food-actions card-actions"><button class="button secondary small" type="button" data-edit-food="${f.id}">編集</button><button class="button danger small" type="button" data-delete-food="${f.id}" aria-label="${f.name}を削除">削除</button></div></article>`;
+const foodSection = `<section class="card"><div class="food-list">${foods.map(foodCard).join("")}</div></section>`;
+
+// D / D'：左に中身（名前・数量・栄養成分）、右にボタンのかたまり
+function mealD(m) {
+  return `<article class="meal-item"><div class="d-body">${mealMain(m)}${mealNutrients(m)}</div><div class="d-actions">${m.temp ? edit(m) : qty(m)}${del(m)}</div></article>`;
+}
+// F：マスターの記録は「数量：[入力欄] g」、右の列はボタンだけ
+function mealF(m) {
+  const amount = m.temp
+    ? `<div class="meal-amount">数量：${m.amount} ${m.unit} <span class="meal-temporary">今日限り</span></div>`
+    : `<div class="meal-amount"><span class="f-label">数量：</span>${qty(m)}<span>${m.unit}</span></div>`;
+  return `<article class="meal-item"><div class="d-body"><div class="meal-main"><div class="meal-name">${m.name}</div>${amount}</div>${mealNutrients(m)}</div><div class="d-actions">${m.temp ? edit(m) : ""}${del(m)}</div></article>`;
+}
+const foodD = f => `<article class="food-card"><div class="d-body"><div class="meal-name">${f.name}</div><div class="food-basis">${f.basis}</div><div class="food-nutrients nutrient-grid"><span class="nutrition-calorie"><small>カロリー</small><strong>${f.kcal} kcal</strong></span><span class="nutrition-protein"><small>タンパク質</small><strong>${f.p} g</strong></span><span class="nutrition-fat"><small>脂質</small><strong>${f.f} g</strong></span><span class="nutrition-carbohydrate"><small>炭水化物</small><strong>${f.c} g</strong></span></div></div><div class="d-actions"><button class="button secondary small" type="button" data-edit-food="${f.id}">編集</button><button class="button danger small" type="button" data-delete-food="${f.id}" aria-label="${f.name}を削除">削除</button></div></article>`;
+const foodSectionD = `<section class="card"><div class="food-list">${foods.map(foodD).join("")}</div></section>`;
+
+function dayParts(d) {
+  const weight = `<div class="history-weight${d.kg ? "" : " is-empty"}">${d.kg ? `${d.kg} <span class="history-weight-unit">kg</span>` : "体重 未記録"}</div>`;
+  const pfc = d.meals ? `<div class="history-pfc"><span class="nutrition-protein">P ${d.pfc[0]}%</span><span class="nutrition-fat">F ${d.pfc[1]}%</span><span class="nutrition-carbohydrate">C ${d.pfc[2]}%</span></div>` : "";
+  const sum = d.meals ? `<div class="history-summary nutrient-grid"><span class="nutrition-calorie">カロリー ${d.meals.kcal} kcal</span><span class="nutrition-protein">タンパク質 ${d.meals.p}g</span><span class="nutrition-fat">脂質 ${d.meals.f}g</span><span class="nutrition-carbohydrate">炭水化物 ${d.meals.c}g</span></div>` : `<div class="history-summary history-no-meals">食事 未記録</div>`;
+  return { weight, pfc, sum };
+}
+const histDel = d => `<button type="button" class="button danger small history-delete" aria-label="${d.date}の記録を削除">削除</button>`;
+function dayNow(d) { const p = dayParts(d); return `<article class="history-row${d.meals ? "" : " no-meals"}"><button type="button" class="history-open"></button><div class="history-date">${d.date}</div>${p.weight}${p.pfc}${p.sum}${histDel(d)}</article>`; }
+function dayB(d) { const p = dayParts(d); return `<article class="history-row${d.meals ? "" : " no-meals"}"><button type="button" class="history-open"></button><div class="history-date">${d.date}</div>${histDel(d)}${p.weight}${p.sum}${p.pfc}</article>`; }
+function dayC(d) { const p = dayParts(d); return `<article class="history-row${d.meals ? "" : " no-meals"}"><button type="button" class="history-open"></button><div class="history-date">${d.date}</div>${p.weight}${p.sum}${p.pfc}<span class="history-chevron" aria-hidden="true"></span></article>`; }
+const histSection = fn => `<section class="card history-card"><div class="history-list">${days.map(fn).join("")}</div></section>`;
+const dayDangerMock = `<p class="mock-caption">↓ 履歴から日付を開いた「今日」の画面の一番下（削除の移動先）</p><section class="card day-danger"><button class="button danger small clear-today-button" type="button" style="margin-top:0">この日の記録（食事と体重）を削除</button><p class="hint">履歴の一覧からは削除できなくなります。年月ごと・全履歴の削除は今までどおり履歴の下にあります。</p></section>`;
+
+// ---------- 案の一覧 ----------
+const option = (id, tag, tagClass, title, body, good, bad) => `<section class="option" id="${id}"><div class="option-frame"><div class="option-title"><span class="tag ${tagClass}">${tag}</span>${title}</div>${body}</div><div class="notes">${good.map(t => `<p class="good">${t}</p>`).join("")}${bad.map(t => `<p class="bad">${t}</p>`).join("")}</div></section>`;
+const targets = [
+  ["today", "1. 今日：食事カード", [
+    option("today-a", "今", "now", "今の配置", `<div>${mealSection(mealNow)}</div>`,
+      ["マスターの記録は、数量入力が右上にあってすぐ押せる。"],
+      ["今日限りの記録だけ「編集」が削除の上にあり、マスターの記録（数量は右上）と骨組みが違う。", "編集と削除の間が5pxしかなく、押し間違えやすい。", "320pxでは、大きい数値の栄養成分が削除に重なる。"]),
+    option("today-b", "B", "", "右上＝主な操作（数量／編集）、右下＝削除", `<div class="v-today-b tall">${mealSection(mealB)}</div>`,
+      ["マスターの記録も今日限りの記録も同じ骨組みになる（右上はよく使う操作、右下は削除）。", "編集と削除が上下に離れるので、押し間違えにくい。", "カードの高さは今とほぼ同じ。"],
+      ["栄養成分の横に削除の列が残る。375pxでは大きい数値でも7px以上あくが、320pxではふつうの数値でも重なる（今の配置も同じ）。そのため320pxの端末だけ栄養成分を1列にする（カードが約35px高くなる）。"]),
+    option("today-c", "C", "", "操作は上段に横並び、栄養成分は全幅", `<div class="v-today-c tall">${mealSection(mealC)}</div>`,
+      ["栄養成分が全幅になり、320pxでも重ならない。", "操作が1か所にまとまり、目線の移動が少ない。"],
+      ["数量（または編集）と削除が横に並ぶので、押し間違えやすい（削除の確認はある）。", "上段の右側が広くなり、食品名の幅が狭くなる。320pxでは長い名前が4〜5行になり、カードが高くなる。"]),
+    option("today-d", "D", "", "右端のボタンを1つのかたまりにして、カードの上下の真ん中に", `<div class="v-d tall">${mealSection(mealD)}</div>`,
+      ["ボタンが1つのかたまりに見え、カード全体への操作だと分かる（名前の行・栄養成分の行に付いて見えない）。", "右の列は幅80px・高さ44pxでそろい、マスターの記録と今日限りの記録で列の幅が同じ。間が12pxあり、押し間違えにくい。"], ["右の列（80px＋12px）をとると、スマートフォン幅では栄養成分の2列が収まらないため1列（4行）になる。カードはB・Eより約20〜45px高い。", "栄養成分が1列になり、履歴（2列）と並び方がそろわない。"]),
+    option("today-dline", "D'", "", "D＋右の操作列の前に薄い区切り線", `<div class="v-d v-dline tall">${mealSection(mealD)}</div>`,
+      ["区切り線で「左＝情報、右＝操作」がはっきり分かれ、かたまり感がいちばん強い。"], ["Dと同じく栄養成分が1列。線の分だけ中身の幅がさらに13px狭くなり、320pxでは名前の折り返しが増える。", "線が入るぶん、カードが少しかたく見える。"]),
+    option("today-e", "E", "", "B のまま、名前を1行に切って「…」で省略", `<div class="v-today-b v-e tall">${mealSection(mealB)}</div>`,
+      ["高さはいちばん低い（Bと同じ配置のまま、全カードが同じ高さ）。栄養成分は2列のまま。"], ["長い食品名が途中で切れて読めない（マスターの記録は、ほかの画面で全文を見る方法がない）。", "Bの「編集が名前の行、削除が栄養成分の行に付いて見える」問題は、名前が1行になる分だけ弱まるが、なくなりはしない。"]),
+    option("today-f", "F", "rec", "数量入力を「数量：[入力欄] g」の行へ、右の列はボタンだけ（上下の真ん中）", `<div class="v-d v-f tall">${mealSection(mealF)}</div>`,
+      ["数量が「数量：[150] g」と名前のすぐ下にあり、何の数量かが分かりやすい。", "右の列は、どのカードもボタンだけ（マスター＝削除、今日限り＝編集＋削除）。食品マスターのD・履歴の › と同じ「右の列＝操作」の考え方にそろう。"], ["マスターの記録では、右の列が削除だけになり、削除が少し目立つ（確認はある）。", "Dと同じく栄養成分が1列で、カードはB・Eより高い。数量の行も入力欄のぶん（40px）高くなる。"])
+  ]],
+  ["weight", "1. 今日：体重の行", [
+    option("weight-a", "今", "rec", "今の配置（1段）のまま（ボタンの高さだけ44pxに）", `<div class="tall">${weightNow}</div>`,
+      ["1段に収まり、高さが低い。「操作は右端、削除はいちばん外側」という、ほかのカードと同じ考え方になっている。", "前回の変更で、320pxでも1行に収まる。"],
+      ["保存と削除が9pxの間隔で隣り合う（削除には確認がある）。"]),
+    option("weight-b", "B", "", "2段（見出しの右に削除、下に入力と保存）", `<div class="v-weight-b tall">${weightB}</div>`,
+      ["削除が保存から離れる。入力欄が広くなり、打ちやすい。", "「記録済み」と状態が分かる。"],
+      ["カードの高さが1段ぶん（約50px）増える。"]),
+    option("weight-c", "C", "", "1段のまま、削除を小さなアイコン（×）にして保存から離す", `<div class="v-weight-c tall">${weightC}</div>`,
+      ["高さは今のまま。44pxの押しやすい大きさのまま、削除が控えめになる。", "320pxでも1行に収まる。"],
+      ["「×」の意味は、読み上げ（aria-label）と確認ダイアログで補う必要がある。ほかの画面の「削除」という文字ボタンとは見た目が違う。"])
+  ]],
+  ["food", "2. 食品マスター：食品カード", [
+    option("food-a", "今", "now", "今の配置", `<div>${foodSection}</div>`,
+      ["今日限りの記録（今の配置）と同じ考え方。"],
+      ["編集と削除の間が5pxで、押し間違えやすい。", "上段の右側が空く。"]),
+    option("food-b", "B", "", "右上＝編集（名前の横）、右下＝削除", `<div class="v-food-b tall">${foodSection}</div>`,
+      ["今日の案Bと同じ考え方（右上はよく使う操作、右下は削除）。", "編集と削除が離れ、上段の右側の空きもなくなる。"],
+      ["今日の案Bと同じく、320pxの端末だけ栄養成分を1列にする（カードが約35px高くなる）。"]),
+    option("food-c", "C", "", "編集・削除を上段に横並び、栄養成分は全幅", `<div class="v-food-c tall">${foodSection}</div>`,
+      ["栄養成分が全幅になり、重ならない。今日の案Cと同じ考え方。"],
+      ["編集と削除が隣り合う。食品名の幅が狭くなり、320pxでは長い名前が4行になる。"]),
+    option("food-d", "D", "rec", "編集・削除を1つのかたまりにして、カードの上下の真ん中に（今日のFも同じ）", `<div class="v-d tall">${foodSectionD}</div>`,
+      ["編集と削除が1つのかたまりになり、カード全体への操作に見える。今日のD・Fと同じ見た目。"], ["スマートフォン幅では栄養成分が1列になり、カードがBより約25〜45px高い。"]),
+    option("food-dline", "D'", "", "D＋右の操作列の前に薄い区切り線", `<div class="v-d v-dline tall">${foodSectionD}</div>`,
+      ["今日のD'と同じく、左右の役割がはっきり分かれる。"], ["Dと同じく栄養成分が1列。中身の幅がさらに狭くなる。"]),
+    option("food-e", "E", "", "B のまま、名前を1行に切って「…」で省略", `<div class="v-food-b v-e tall">${foodSection}</div>`,
+      ["高さがいちばん低い。栄養成分は2列のまま。"], ["長い食品名が切れて、食品マスター（名前を確かめる画面）で全文が読めない。食品マスターでは特に不向き。"])
+  ]],
+  ["history", "3. 履歴：日ごとのカード", [
+    option("hist-a", "今", "now", "今の配置（PFC→栄養成分、削除は栄養成分の中央）", `<div>${histSection(dayNow)}</div>`,
+      ["カードのどこを押しても開ける。"],
+      ["PFCが栄養成分より上で、今日の画面（合計→PFC）と順番が逆。", "削除の列のせいで、日付・体重の行の右側が大きく空く。"]),
+    option("hist-b", "B", "", "日付→体重→栄養成分→PFC、削除は日付の行の右", `<div class="v-hist-b tall">${histSection(dayB)}</div>`,
+      ["今日の画面と同じ順番。栄養成分とPFCは全幅になり、右側の空きがなくなる。", "削除は一覧に残るので、今と同じ手順で消せる。"],
+      ["削除が一番上の目立つ位置にくる。めったに使わない操作なのに、目に入りやすい。"]),
+    option("hist-c", "C", "rec", "日付→体重→栄養成分→PFC、削除は開いた日の画面へ移す", `<div class="v-hist-c tall">${histSection(dayC)}${dayDangerMock}</div>`,
+      ["一覧が見るためだけの画面になり、すっきりする。右端の › で「押すと開く」と分かる。", "削除はその日を開いて中身を見てから行うので、間違えて消しにくい。"],
+      ["削除の手順が1つ増える（開く → 一番下の削除）。", "今日の画面の「今日の食事をすべて削除」（食事だけ）と並ぶので、文言で違いを分かりやすくする必要がある。"])
+  ]]
+];
+
+// ===================== 案G：「⋯」メニュー =====================
+// 今の実装（ルートの app.js）と同じマークアップで「今の形」を作り、案Gは右の列をなくして右上に「⋯」を置く
+const gMeals = [
+  { id: "gm1", name: "ごはん", amount: "150", unit: "g", kcal: "234", p: "3.8", f: "0.5", c: "55.7" },
+  { id: "gm2", name: "業務用ミックスナッツ（食塩不使用・大容量パック）お徳用の詰め合わせセット", amount: "9999.99", unit: "個", kcal: "9,999.9", p: "999.9", f: "999.9", c: "999.9" },
+  { id: "gm3", temp: true, name: "コンビニのおにぎり 鮭", amount: "2", unit: "個", kcal: "360", p: "10", f: "2", c: "76" },
+  { id: "gm4", temp: true, name: "ああああああああああああああああああああABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstu", amount: "1", unit: "ながいたんいテストです1", kcal: "1,234.5", p: "56.7", f: "48.2", c: "150.2" }
+];
+const gFoods = [
+  { id: "gf1", name: "ごはん", basis: "100gあたり", kcal: "156", p: "2.5", f: "0.3", c: "37.1" },
+  { id: "gf2", name: "上限テスト（個数で記録する食品のいちばん大きい値の確認用）", basis: "9,999.99 ながいたんいテストです1あたり", kcal: "9,999.9", p: "999.9", f: "999.9", c: "999.9" },
+  { id: "gf3", name: "鶏むね肉（皮なし）生", basis: "100gあたり", kcal: "105", p: "23.3", f: "1.9", c: "0.1" }
+];
+const gDays = [
+  { date: "2026/11/14(土)", kg: "72.5", meals: { kcal: "9,999.9", p: "999.9", f: "999.9", c: "999.9" }, pfc: ["40", "90", "40"] },
+  { date: "2026/11/10(火)", kg: "73.2", meals: null },
+  { date: "2026/11/01(日)", kg: null, meals: { kcal: "600", p: "24", f: "12", c: "135" }, pfc: ["16", "18", "90"] }
+];
+const gNut = m => `<div class="meal-nutrients nutrient-grid"><span class="nutrition-calorie">カロリー ${m.kcal} kcal</span><span class="nutrition-protein">タンパク質 ${m.p} g</span><span class="nutrition-fat">脂質 ${m.f} g</span><span class="nutrition-carbohydrate">炭水化物 ${m.c} g</span></div>`;
+const gAmount = m => m.temp
+  ? `<div class="meal-amount">数量：${m.amount} ${m.unit} <span class="meal-temporary">手入力</span></div>`
+  : `<label class="meal-amount meal-amount-edit"><span class="meal-amount-label">数量：</span><input class="quantity-input" type="number" value="${m.amount}" aria-label="${m.name}の数量"><span class="meal-amount-unit">${m.unit}</span></label>`;
+const gBody = m => `<div class="card-body"><div class="meal-main"><div class="meal-name">${m.name}</div>${gAmount(m)}</div>${gNut(m)}</div>`;
+const gMore = (label, menu) => `<button class="g-more" type="button" aria-label="${label}の操作" aria-haspopup="dialog" data-g-menu="${menu}">⋯</button>`;
+const gMealNow = m => `<article class="meal-item">${gBody(m)}<div class="card-actions">${m.temp ? `<button class="button secondary small" type="button">編集</button>` : ""}<button class="button danger small" type="button">削除</button></div></article>`;
+const gMealG = m => `<article class="meal-item">${gBody(m)}${gMore(m.name, m.temp ? "temp" : "master")}</article>`;
+const gFoodInner = f => `<div class="food-main"><div class="meal-name">${f.name}</div><div class="food-nutrition"><div class="food-basis">${f.basis}</div><div class="food-nutrients nutrient-grid"><span class="nutrition-calorie"><small>カロリー</small><strong>${f.kcal} kcal</strong></span><span class="nutrition-protein"><small>タンパク質</small><strong>${f.p} g</strong></span><span class="nutrition-fat"><small>脂質</small><strong>${f.f} g</strong></span><span class="nutrition-carbohydrate"><small>炭水化物</small><strong>${f.c} g</strong></span></div></div></div>`;
+const gFoodNow = f => `<article class="food-card">${gFoodInner(f)}<div class="food-actions card-actions"><button class="button secondary small" type="button">編集</button><button class="button danger small" type="button">削除</button></div></article>`;
+const gFoodG = f => `<article class="food-card">${gFoodInner(f)}${gMore(f.name, "food")}</article>`;
+const gDayBody = d => `<div class="history-body"><div class="history-date">${d.date}<span class="history-chevron" aria-hidden="true"></span></div><div class="history-weight${d.kg ? "" : " is-empty"}">${d.kg ? `${d.kg} <span class="history-weight-unit">kg</span>` : "体重 未記録"}</div>${d.meals ? `<div class="history-summary nutrient-grid"><span class="nutrition-calorie">カロリー ${d.meals.kcal} kcal</span><span class="nutrition-protein">タンパク質 ${d.meals.p} g</span><span class="nutrition-fat">脂質 ${d.meals.f} g</span><span class="nutrition-carbohydrate">炭水化物 ${d.meals.c} g</span></div><div class="history-pfc"><span class="nutrition-protein">P ${d.pfc[0]}%</span><span class="nutrition-fat">F ${d.pfc[1]}%</span><span class="nutrition-carbohydrate">C ${d.pfc[2]}%</span></div>` : `<div class="history-summary history-no-meals">食事 未記録</div>`}</div>`;
+const gDayNow = d => `<article class="history-row${d.meals ? "" : " no-meals"}"><button type="button" class="history-open" aria-label="${d.date}を開く"></button>${gDayBody(d)}<button type="button" class="button danger small history-delete">削除</button></article>`;
+const gDayG = d => `<article class="history-row${d.meals ? "" : " no-meals"}"><button type="button" class="history-open" aria-label="${d.date}を開く"></button>${gDayBody(d)}${gMore(d.date, "day")}</article>`;
+const gMealSection = fn => `<section class="card"><div class="meal-top"><h2>食事</h2></div><div class="meal-list">${gMeals.map(fn).join("")}</div></section>`;
+const gFoodSection = fn => `<section class="card"><div class="food-list">${gFoods.map(fn).join("")}</div></section>`;
+const gHistSection = fn => `<section class="card history-card"><div class="history-list">${gDays.map(fn).join("")}</div></section>`;
+// メニューの中身（カードごとに変える）。削除は赤い文字で、ほかの操作と少し離す。いちばん下にキャンセル
+const gMenus = {
+  master: { title: "ごはん", sub: "数量：150 g", actions: [] },
+  temp: { title: "コンビニのおにぎり 鮭", sub: "手入力・数量：2 個", actions: ["編集"] },
+  food: { title: "ごはん", sub: "100gあたり", actions: ["編集"] },
+  day: { title: "2026/11/14(土)", sub: "72.5 kg ・ 9,999.9 kcal", actions: ["その日を開く"] }
+};
+const gSheet = (key, title) => { const m = gMenus[key]; const t = title || m.title; return `<div class="g-sheet"><div class="g-sheet-group"><div class="g-sheet-title"><strong>${t}</strong>${m.sub}</div>${m.actions.map(a => `<button class="g-sheet-action" type="button">${a}</button>`).join("")}${m.actions.length ? `<div class="g-sheet-gap"></div>` : ""}<button class="g-sheet-action danger" type="button">削除</button></div><button class="g-sheet-cancel" type="button">キャンセル</button></div>`; };
+const gPhone = (content, key) => `<div class="g-phone"><div class="g-phone-content">${content}</div><div class="g-phone-shade"></div>${gSheet(key)}</div>`;
+const gTable = `<div style="overflow-x:auto;margin-top:8px"><table class="cmp cmp-g">
+  <thead><tr><th></th><th>統一感</th><th>見た目</th><th>使いやすさ</th><th>実装の手間</th></tr></thead>
+  <tbody>
+    <tr><td>今の形</td><td>○ 右の列にボタン（カードによって1個か2個）</td><td>○ 操作が見えて分かりやすいが、右の列のぶん中身が狭い</td><td>◎ 編集・削除が1回で押せる</td><td>—</td></tr>
+    <tr><td>案G</td><td>◎ どのカードも右上の「⋯」1つ</td><td>◎ すっきり、中身が全幅（320pxでも2列）</td><td>○ 編集・削除が1手増える。一覧での削除の押し間違いは起きない</td><td>中（メニューの dialog 1つと、カードごとの中身の切り替え）</td></tr>
+  </tbody></table></div>`;
+targets.push(["g", "4. 案G：操作を「⋯」メニューにまとめる", [
+  option("g-today-now", "今", "now", "今日：今の形（右の列にボタン）", `<div>${gMealSection(gMealNow)}</div>`,
+    ["編集・削除がいつも見えていて、1回で押せる。"],
+    ["右の列（50px＋間隔12px）のぶん中身が狭く、320pxでは栄養成分が1列になる。", "マスターの記録は削除だけ、手入力の記録は編集＋削除で、右の列のボタンの数がそろわない。"]),
+  option("g-today", "G", "", "今日：右上に「⋯」、押すと下からメニュー", `<div class="v-g">${gMealSection(gMealG)}</div>`,
+    ["中身が全幅になり、320pxでも栄養成分が2列のまま。どのカードも右上の「⋯」1つで、見た目がそろう。", "削除がメニューの中（赤い文字・ほかの操作と離す）になり、一覧での押し間違いが起きない。", "数量の入力（いちばんよく使う操作）は今のまま、カードの上で直接できる。"],
+    ["手入力の記録の編集・削除が1手増える（⋯ → 編集）。", "「⋯」は控えめな見た目なので、初めて使う人には操作の場所が分かりにくいことがある。"]),
+  option("g-menu-today", "G", "", "今日：手入力の記録の「⋯」を押したとき", gPhone(`<div class="v-g">${gMealSection(m => gMeals.indexOf(m) === 2 ? gMealG(m) : "")}</div>`, "temp"),
+    ["見出しに食品名と数量が出て、どの記録の操作か分かる。削除は赤い文字で、編集から離してある。"],
+    ["メニューで削除を押したあと、今と同じ確認ダイアログを残すと2段階になる（残すかどうかを決める必要がある）。"]),
+  option("g-food-now", "今", "now", "食品マスター：今の形", `<div>${gFoodSection(gFoodNow)}</div>`,
+    ["編集・削除がいつも見えている。"], ["右の列のぶん中身が狭く、320pxでは栄養成分が1列。"]),
+  option("g-food", "G", "", "食品マスター：右上に「⋯」", `<div class="v-g">${gFoodSection(gFoodG)}</div>`,
+    ["今日のカードと同じ形。食品名・基準量・栄養成分が全幅で読みやすい。"],
+    ["食品マスターでは編集をよく使うので、1手増えるのが気になる場合がある（カード全体を押すと編集を開く、という組み合わせもできる）。"]),
+  option("g-hist-now", "今", "now", "履歴：今の形（右の列に削除）", `<div>${gHistSection(gDayNow)}</div>`,
+    ["カードのどこを押しても開け、削除もすぐ押せる。"], ["めったに使わない削除がいつも目に入る。右の列のぶん中身が狭い。"]),
+  option("g-hist", "G", "", "履歴：右上に「⋯」、それ以外はどこを押しても開く", `<div class="v-g">${gHistSection(gDayG)}</div>`,
+    ["めったに使わない削除が一覧から消え、すっきりする。中身が全幅。", "「⋯」以外のどこを押してもその日が開く（今と同じ）。"],
+    ["日付の後ろの「›」と右上の「⋯」が同じ行に並ぶ。「›」を残すかどうかを決める必要がある。"]),
+  option("g-menu-hist", "G", "", "履歴：「⋯」を押したとき", gPhone(`<div class="v-g">${gHistSection(d => gDays.indexOf(d) === 0 ? gDayG(d) : "")}</div>`, "day"),
+    ["見出しに日付と体重・カロリーが出る。「その日を開く」と「削除」が離れている。"],
+    ["「その日を開く」はカードを押しても同じなので、メニューの中では重複している（削除だけにしてもよい）。"])
+]]);
+document.getElementById("content").innerHTML = targets.map(([id, title, opts]) => `<section class="target" id="${id}"><h2>${title}</h2>${opts.join("")}</section>`).join("");
+// 案G：⋯ を押すと本物の <dialog> でメニューを開く（見た目と動きの確認用。iOS 15 で使える showModal。Popover API は使わない）
+document.body.insertAdjacentHTML("beforeend", `<dialog id="g-menu" class="g-menu" aria-label="操作"></dialog>`);
+const gDialog = document.getElementById("g-menu");
+document.getElementById("g").insertAdjacentHTML("beforeend", `<h3 style="margin:8px 2px 4px">今の形と案Gの比較</h3>${gTable}`);
+document.addEventListener("click", e => {
+  const more = e.target.closest("[data-g-menu]");
+  if (more) { e.stopPropagation(); gDialog.innerHTML = gSheet(more.dataset.gMenu, more.getAttribute("aria-label").replace(/の操作$/, "")); gDialog.showModal(); return; }
+  if (e.target === gDialog || e.target.closest(".g-sheet-cancel, .g-sheet-action")) gDialog.close();
+});
+// 入力やボタンは見本なので動かさない
+document.addEventListener("click", e => { if (e.target.closest("button")) e.preventDefault(); }, true);
+</script>
+</body>
+</html>

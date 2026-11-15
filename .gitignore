@@ -1,0 +1,32 @@
+# ローカル証明書と秘密鍵（端末ごとに mkcert で作る。key.pem は絶対に公開しない）
+cert.pem
+key.pem
+
+# 依存パッケージ（npm install で入れ直せる）
+node_modules/
+
+# mkcert の実行ファイル（README の手順で各自入手する）
+mkcert.exe
+
+# 作業用のスクリーンショット
+design/shots/
+
+# iOS（Capacitor）の生成物・ビルドの成果物。ios/.gitignore と ios/App/CapApp-SPM/.gitignore でも除外している
+ios/App/App/public/
+ios/App/Pods/
+ios/App/build/
+ios/App/output/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# OS・エディターの不要ファイル
+Thumbs.db
+ehthumbs.db
+desktop.ini
+.DS_Store
+._*
+*.swp
+*~
+.vscode/
+.idea/
